@@ -1,0 +1,74 @@
+### ---------- LOCAL ----------
+@local=http://localhost:8080
+
+GET {{local}}/
+GET {{local}}/healthz
+GET {{local}}/api-docs
+GET {{local}}/swagger.json
+
+### Books (local)
+GET {{local}}/books
+
+POST {{local}}/books
+Content-Type: application/json
+
+{
+  "title": "Clean Code",
+  "isbn": "9780132350884",
+  "authorId": "000000000000000000000000",
+  "publishedYear": 2008,
+  "genres": ["Software", "Best Practices"],
+  "pages": 464,
+  "inStock": true,
+  "price": 34.99
+}
+
+### replace with a real id
+GET {{local}}/books/000000000000000000000000
+
+PUT {{local}}/books/000000000000000000000000
+Content-Type: application/json
+
+{
+  "title": "Clean Code (2nd Ed.)",
+  "isbn": "9780132350884",
+  "authorId": "000000000000000000000000",
+  "publishedYear": 2025,
+  "genres": ["Software", "Best Practices"],
+  "pages": 480,
+  "inStock": true,
+  "price": 39.99
+}
+
+DELETE {{local}}/books/000000000000000000000000
+
+### Authors (local)
+GET {{local}}/authors
+
+POST {{local}}/authors
+Content-Type: application/json
+
+{
+  "firstName": "Robert",
+  "lastName": "Martin",
+  "email": "unclebob@example.com",
+  "birthdate": "1952-12-05",
+  "nationality": "USA",
+  "website": "https://blog.cleancoder.com"
+}
+
+GET {{local}}/authors/000000000000000000000000
+
+PUT {{local}}/authors/000000000000000000000000
+Content-Type: application/json
+
+{
+  "firstName": "Robert",
+  "lastName": "Martin",
+  "email": "bob.martin@example.com",
+  "birthdate": "1952-12-05",
+  "nationality": "USA",
+  "website": "https://blog.cleancoder.com"
+}
+
+DELETE {{local}}/authors/000000000000000000000000

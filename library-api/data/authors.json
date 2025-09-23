@@ -1,0 +1,10 @@
+[
+  {
+    "firstName": "Andy",
+    "lastName": "Hunt",
+    "email": "andy@example.com",
+    "birthdate": "1964-01-01",
+    "nationality": "USA",
+    "website": "https://example.com"
+  }
+]

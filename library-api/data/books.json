@@ -1,0 +1,12 @@
+[
+  {
+    "title": "The Pragmatic Programmer",
+    "isbn": "9780201616224",
+    "authorId": "000000000000000000000000",
+    "publishedYear": 1999,
+    "genres": ["Software", "Career"],
+    "pages": 352,
+    "inStock": true,
+    "price": 29.99
+  }
+]
