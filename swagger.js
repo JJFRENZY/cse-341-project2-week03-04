@@ -2,7 +2,7 @@
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 
-const domain = process.env.AUTH0_DOMAIN; // e.g., dev-xxxxxx.us.auth0.com
+const domain = process.env.AUTH0_DOMAIN || 'YOUR_DOMAIN.auth0.com'; // fallback so the button still shows
 
 const options = {
   definition: {
@@ -33,6 +33,8 @@ const options = {
         }
       }
     }
+    // Optional default to mark all ops as requiring auth:
+    // ,security: [{ oauth2: ['read:library'] }]
   },
   apis: ['./routes/*.js']
 };
@@ -41,10 +43,18 @@ export const swaggerSpec = swaggerJsdoc(options);
 export const serveSwagger = swaggerUi.serve;
 export const setupSwagger = swaggerUi.setup(swaggerSpec, {
   explorer: true,
-  oauth: {
-    clientId: process.env.AUTH0_CLIENT_ID,
-    clientSecret: process.env.AUTH0_CLIENT_SECRET,
-    usePkceWithAuthorizationCodeGrant: true,
-    appName: 'Library API (Swagger OAuth)'
+  swaggerOptions: {
+    persistAuthorization: true,
+    oauth2RedirectUrl:
+      process.env.SWAGGER_OAUTH2_REDIRECT_URL ||
+      'http://localhost:8080/api-docs/oauth2-redirect.html',
+    oauth: {
+      clientId: process.env.AUTH0_CLIENT_ID || 'YOUR_CLIENT_ID',
+      clientSecret: process.env.AUTH0_CLIENT_SECRET, // optional for auth code + PKCE
+      usePkceWithAuthorizationCodeGrant: true,
+      scopes: ['read:library', 'write:library']
+      // If you need Auth0 audience in the authorize URL:
+      // additionalQueryStringParams: { audience: process.env.AUTH0_AUDIENCE }
+    }
   }
 });
