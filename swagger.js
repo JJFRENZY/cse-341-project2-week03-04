@@ -2,7 +2,8 @@
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 
-const domain = process.env.AUTH0_DOMAIN || 'YOUR_DOMAIN.auth0.com'; // fallback so the button still shows
+// Use a safe fallback so the Authorize button renders even if env isn't set yet
+const domain = process.env.AUTH0_DOMAIN || 'YOUR_DOMAIN.auth0.com';
 
 const options = {
   definition: {
@@ -32,9 +33,9 @@ const options = {
           }
         }
       }
-    }
-    // Optional default to mark all ops as requiring auth:
-    // ,security: [{ oauth2: ['read:library'] }]
+    },
+    // Global security requirement ensures the Authorize button shows
+    security: [{ oauth2: [] }]
   },
   apis: ['./routes/*.js']
 };
@@ -45,15 +46,15 @@ export const setupSwagger = swaggerUi.setup(swaggerSpec, {
   explorer: true,
   swaggerOptions: {
     persistAuthorization: true,
-    oauth2RedirectUrl:
-      process.env.SWAGGER_OAUTH2_REDIRECT_URL ||
-      'http://localhost:8080/api-docs/oauth2-redirect.html',
+    // Works on both localhost and Render (relative path)
+    oauth2RedirectUrl: '/api-docs/oauth2-redirect.html',
     oauth: {
       clientId: process.env.AUTH0_CLIENT_ID || 'YOUR_CLIENT_ID',
-      clientSecret: process.env.AUTH0_CLIENT_SECRET, // optional for auth code + PKCE
+      // clientSecret optional with PKCE; keep if you use it
+      clientSecret: process.env.AUTH0_CLIENT_SECRET,
       usePkceWithAuthorizationCodeGrant: true,
-      scopes: ['read:library', 'write:library']
-      // If you need Auth0 audience in the authorize URL:
+      scopes: ['read:library', 'write:library'],
+      // If your Auth0 API requires an audience param on authorize:
       // additionalQueryStringParams: { audience: process.env.AUTH0_AUDIENCE }
     }
   }
