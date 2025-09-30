@@ -3,9 +3,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { getDb } from '../db/connect.js';
 import { ObjectId } from 'mongodb';
+import { jwtCheck, needWrite } from '../middleware/auth.js';
 
 const router = Router();
 
+// If you're on Zod >= 3.23, z.string().date() validates RFC3339 full-date (YYYY-MM-DD).
+// If not, you can replace with: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
 const AuthorSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
@@ -17,7 +20,10 @@ const AuthorSchema = z.object({
 
 const parseId = (id) => {
   try { return new ObjectId(id); }
-  catch { const e = new Error('Invalid id format'); e.statusCode = 400; e.expose = true; throw e; }
+  catch {
+    const e = new Error('Invalid id format');
+    e.statusCode = 400; e.expose = true; throw e;
+  }
 };
 
 /**
@@ -32,13 +38,31 @@ const parseId = (id) => {
  *       type: object
  *       required: [firstName, lastName, email, birthdate, nationality]
  *       properties:
- *         _id: { type: string, description: MongoDB ObjectId }
- *         firstName: { type: string }
- *         lastName: { type: string }
- *         email: { type: string, format: email }
- *         birthdate: { type: string, format: date, example: 1970-01-01 }
- *         nationality: { type: string }
- *         website: { type: string, format: uri }
+ *         _id:
+ *           type: string
+ *           description: MongoDB ObjectId
+ *           example: 665f6a0f2c3d4b1a9f0a1234
+ *         firstName:
+ *           type: string
+ *           example: J.R.R.
+ *         lastName:
+ *           type: string
+ *           example: Tolkien
+ *         email:
+ *           type: string
+ *           format: email
+ *           example: tolkien@example.com
+ *         birthdate:
+ *           type: string
+ *           format: date
+ *           example: 1892-01-03
+ *         nationality:
+ *           type: string
+ *           example: British
+ *         website:
+ *           type: string
+ *           format: uri
+ *           example: https://tolkien.co.uk
  */
 
 /**
@@ -98,11 +122,20 @@ router.get('/:id', async (req, res, next) => {
  *   post:
  *     summary: Create a new author
  *     tags: [Authors]
+ *     security:
+ *       - oauth2: [write:library]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema: { $ref: '#/components/schemas/Author' }
+ *           example:
+ *             firstName: "J.R.R."
+ *             lastName: "Tolkien"
+ *             email: "tolkien@example.com"
+ *             birthdate: "1892-01-03"
+ *             nationality: "British"
+ *             website: "https://tolkien.co.uk"
  *     responses:
  *       201:
  *         description: Created
@@ -113,16 +146,22 @@ router.get('/:id', async (req, res, next) => {
  *               properties:
  *                 id: { type: string }
  *       400: { description: Validation error }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden (missing scope) }
  *       415: { description: Unsupported Media Type }
  */
-router.post('/', async (req, res, next) => {
+router.post('/', jwtCheck, needWrite, async (req, res, next) => {
   try {
-    if (!req.is('application/json')) return res.status(415).json({ message: 'Content-Type must be application/json' });
+    if (!req.is('application/json')) {
+      return res.status(415).json({ message: 'Content-Type must be application/json' });
+    }
     const parsed = AuthorSchema.parse(req.body);
     const result = await getDb().collection('authors').insertOne(parsed);
     res.status(201).location(`/authors/${result.insertedId}`).json({ id: result.insertedId.toString() });
   } catch (err) {
-    if (err instanceof z.ZodError) return res.status(400).json({ message: 'Validation error', errors: err.flatten() });
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ message: 'Validation error', errors: err.flatten() });
+    }
     next(err);
   }
 });
@@ -133,6 +172,8 @@ router.post('/', async (req, res, next) => {
  *   put:
  *     summary: Replace an author
  *     tags: [Authors]
+ *     security:
+ *       - oauth2: [write:library]
  *     parameters:
  *       - in: path
  *         name: id
@@ -146,19 +187,25 @@ router.post('/', async (req, res, next) => {
  *     responses:
  *       204: { description: Updated (no content) }
  *       400: { description: Validation/ID error }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden (missing scope) }
  *       404: { description: Not found }
  *       415: { description: Unsupported Media Type }
  */
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', jwtCheck, needWrite, async (req, res, next) => {
   try {
-    if (!req.is('application/json')) return res.status(415).json({ message: 'Content-Type must be application/json' });
+    if (!req.is('application/json')) {
+      return res.status(415).json({ message: 'Content-Type must be application/json' });
+    }
     const _id = parseId(req.params.id);
     const parsed = AuthorSchema.parse(req.body);
     const result = await getDb().collection('authors').replaceOne({ _id }, parsed);
     if (result.matchedCount === 0) return res.status(404).json({ message: 'Author not found' });
     res.status(204).send();
   } catch (err) {
-    if (err instanceof z.ZodError) return res.status(400).json({ message: 'Validation error', errors: err.flatten() });
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ message: 'Validation error', errors: err.flatten() });
+    }
     next(err);
   }
 });
@@ -169,6 +216,8 @@ router.put('/:id', async (req, res, next) => {
  *   delete:
  *     summary: Delete an author
  *     tags: [Authors]
+ *     security:
+ *       - oauth2: [write:library]
  *     parameters:
  *       - in: path
  *         name: id
@@ -177,9 +226,11 @@ router.put('/:id', async (req, res, next) => {
  *     responses:
  *       204: { description: Deleted }
  *       400: { description: Invalid id }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden (missing scope) }
  *       404: { description: Not found }
  */
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', jwtCheck, needWrite, async (req, res, next) => {
   try {
     const _id = parseId(req.params.id);
     const result = await getDb().collection('authors').deleteOne({ _id });

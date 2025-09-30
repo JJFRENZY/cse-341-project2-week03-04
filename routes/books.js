@@ -1,14 +1,20 @@
+// routes/books.js
 import { Router } from 'express';
 import { z } from 'zod';
 import { getDb } from '../db/connect.js';
 import { ObjectId } from 'mongodb';
+import { jwtCheck, needWrite } from '../middleware/auth.js';
 
 const router = Router();
+
+const ObjectIdString = z
+  .string()
+  .regex(/^[0-9a-fA-F]{24}$/, 'Must be a 24-character hex string');
 
 const BookSchema = z.object({
   title: z.string().min(1),
   isbn: z.string().min(10),
-  authorId: z.string().length(24), // ObjectId as string
+  authorId: ObjectIdString, // stored as string, validated as ObjectId shape
   publishedYear: z.number().int().gte(1400).lte(new Date().getFullYear() + 1),
   genres: z.array(z.string()).min(1),
   pages: z.number().int().positive(),
@@ -26,6 +32,51 @@ const parseId = (id) => {
  * tags:
  *   - name: Books
  *     description: CRUD for books
+ *
+ * components:
+ *   schemas:
+ *     Book:
+ *       type: object
+ *       required:
+ *         - title
+ *         - isbn
+ *         - authorId
+ *         - publishedYear
+ *         - genres
+ *         - pages
+ *         - inStock
+ *         - price
+ *       properties:
+ *         _id:
+ *           type: string
+ *           description: MongoDB ObjectId
+ *           example: 665f6a0f2c3d4b1a9f0a1234
+ *         title:
+ *           type: string
+ *           example: The Hobbit
+ *         isbn:
+ *           type: string
+ *           example: 9780547928227
+ *         authorId:
+ *           type: string
+ *           description: Author's ObjectId (24 hex chars)
+ *           example: 665f6a0f2c3d4b1a9f0a1234
+ *         publishedYear:
+ *           type: integer
+ *           example: 1937
+ *         genres:
+ *           type: array
+ *           items: { type: string }
+ *           example: ["Fantasy", "Classic"]
+ *         pages:
+ *           type: integer
+ *           example: 310
+ *         inStock:
+ *           type: boolean
+ *           example: true
+ *         price:
+ *           type: number
+ *           example: 14.99
  */
 
 /**
@@ -37,6 +88,11 @@ const parseId = (id) => {
  *     responses:
  *       200:
  *         description: List of books
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/Book' }
  */
 router.get('/', async (_req, res, next) => {
   try {
@@ -57,7 +113,11 @@ router.get('/', async (_req, res, next) => {
  *         required: true
  *         schema: { type: string }
  *     responses:
- *       200: { description: A book }
+ *       200:
+ *         description: A book
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Book' }
  *       400: { description: Invalid id }
  *       404: { description: Not found }
  */
@@ -76,16 +136,34 @@ router.get('/:id', async (req, res, next) => {
  *   post:
  *     summary: Create a new book
  *     tags: [Books]
+ *     security:
+ *       - oauth2: [write:library]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
- *           schema: { type: object }
+ *           schema: { $ref: '#/components/schemas/Book' }
+ *           example:
+ *             title: The Hobbit
+ *             isbn: "9780547928227"
+ *             authorId: "665f6a0f2c3d4b1a9f0a1234"
+ *             publishedYear: 1937
+ *             genres: ["Fantasy"]
+ *             pages: 310
+ *             inStock: true
+ *             price: 14.99
  *     responses:
- *       201: { description: Created }
+ *       201:
+ *         description: Created; returns new book id
+ *         content:
+ *           application/json:
+ *             schema: { type: object, properties: { id: { type: string } } }
  *       400: { description: Validation error }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden (missing scope) }
+ *       415: { description: Unsupported Media Type }
  */
-router.post('/', async (req, res, next) => {
+router.post('/', jwtCheck, needWrite, async (req, res, next) => {
   try {
     if (!req.is('application/json')) return res.status(415).json({ message: 'Content-Type must be application/json' });
     const parsed = BookSchema.parse(req.body);
@@ -103,6 +181,8 @@ router.post('/', async (req, res, next) => {
  *   put:
  *     summary: Replace a book
  *     tags: [Books]
+ *     security:
+ *       - oauth2: [write:library]
  *     parameters:
  *       - in: path
  *         name: id
@@ -112,13 +192,16 @@ router.post('/', async (req, res, next) => {
  *       required: true
  *       content:
  *         application/json:
- *           schema: { type: object }
+ *           schema: { $ref: '#/components/schemas/Book' }
  *     responses:
  *       204: { description: Updated }
  *       400: { description: Validation/ID error }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden (missing scope) }
  *       404: { description: Not found }
+ *       415: { description: Unsupported Media Type }
  */
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', jwtCheck, needWrite, async (req, res, next) => {
   try {
     if (!req.is('application/json')) return res.status(415).json({ message: 'Content-Type must be application/json' });
     const _id = parseId(req.params.id);
@@ -138,6 +221,8 @@ router.put('/:id', async (req, res, next) => {
  *   delete:
  *     summary: Delete a book
  *     tags: [Books]
+ *     security:
+ *       - oauth2: [write:library]
  *     parameters:
  *       - in: path
  *         name: id
@@ -146,9 +231,11 @@ router.put('/:id', async (req, res, next) => {
  *     responses:
  *       204: { description: Deleted }
  *       400: { description: Invalid id }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden (missing scope) }
  *       404: { description: Not found }
  */
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', jwtCheck, needWrite, async (req, res, next) => {
   try {
     const _id = parseId(req.params.id);
     const result = await getDb().collection('books').deleteOne({ _id });
