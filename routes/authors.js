@@ -7,22 +7,43 @@ import { jwtCheck, needWrite } from '../middleware/auth.js';
 
 const router = Router();
 
-// If you're on Zod >= 3.23, z.string().date() validates RFC3339 full-date (YYYY-MM-DD).
-// If not, you can replace with: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
+/**
+ * Zod helpers
+ */
+const nonEmptyTrimmed = z.string().trim().min(1);
+const emailLower = z.string().email().transform((e) => e.toLowerCase().trim());
+
+// birthdate: RFC3339 full-date string (YYYY-MM-DD), convert to Date, ensure not in the future
+const birthdateAsDate = z
+  .string()
+  .date()
+  .transform((s) => new Date(`${s}T00:00:00.000Z`))
+  .refine((d) => d <= new Date(), { message: 'birthdate cannot be in the future' });
+
+/**
+ * Author schema (client never sends _id)
+ * We store:
+ *  - firstName / lastName trimmed
+ *  - email lowercased
+ *  - birthdate as Date (Mongo Date type)
+ */
 const AuthorSchema = z.object({
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  email: z.string().email(),
-  birthdate: z.string().date(), // YYYY-MM-DD
-  nationality: z.string().min(1),
-  website: z.string().url().optional()
+  firstName: nonEmptyTrimmed,
+  lastName: nonEmptyTrimmed,
+  email: emailLower,
+  birthdate: birthdateAsDate, // stored as Date
+  nationality: nonEmptyTrimmed,
+  website: z.string().url().trim().optional()
 });
 
 const parseId = (id) => {
-  try { return new ObjectId(id); }
-  catch {
+  try {
+    return new ObjectId(id);
+  } catch {
     const e = new Error('Invalid id format');
-    e.statusCode = 400; e.expose = true; throw e;
+    e.statusCode = 400;
+    e.expose = true;
+    throw e;
   }
 };
 
@@ -84,7 +105,9 @@ router.get('/', async (_req, res, next) => {
   try {
     const docs = await getDb().collection('authors').find({}).toArray();
     res.status(200).json(docs);
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**
@@ -113,7 +136,9 @@ router.get('/:id', async (req, res, next) => {
     const doc = await getDb().collection('authors').findOne({ _id });
     if (!doc) return res.status(404).json({ message: 'Author not found' });
     res.status(200).json(doc);
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**
@@ -123,6 +148,7 @@ router.get('/:id', async (req, res, next) => {
  *     summary: Create a new author
  *     tags: [Authors]
  *     security:
+ *       - bearerAuth: []
  *       - oauth2: [write:library]
  *     requestBody:
  *       required: true
@@ -157,7 +183,10 @@ router.post('/', jwtCheck, needWrite, async (req, res, next) => {
     }
     const parsed = AuthorSchema.parse(req.body);
     const result = await getDb().collection('authors').insertOne(parsed);
-    res.status(201).location(`/authors/${result.insertedId}`).json({ id: result.insertedId.toString() });
+    res
+      .status(201)
+      .location(`/authors/${result.insertedId}`)
+      .json({ id: result.insertedId.toString() });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ message: 'Validation error', errors: err.flatten() });
@@ -173,6 +202,7 @@ router.post('/', jwtCheck, needWrite, async (req, res, next) => {
  *     summary: Replace an author
  *     tags: [Authors]
  *     security:
+ *       - bearerAuth: []
  *       - oauth2: [write:library]
  *     parameters:
  *       - in: path
@@ -217,6 +247,7 @@ router.put('/:id', jwtCheck, needWrite, async (req, res, next) => {
  *     summary: Delete an author
  *     tags: [Authors]
  *     security:
+ *       - bearerAuth: []
  *       - oauth2: [write:library]
  *     parameters:
  *       - in: path
@@ -236,7 +267,9 @@ router.delete('/:id', jwtCheck, needWrite, async (req, res, next) => {
     const result = await getDb().collection('authors').deleteOne({ _id });
     if (result.deletedCount === 0) return res.status(404).json({ message: 'Author not found' });
     res.status(204).send();
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;

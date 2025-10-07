@@ -7,14 +7,17 @@ import { jwtCheck, needWrite } from '../middleware/auth.js';
 
 const router = Router();
 
+/** Validate 24-char hex and transform to ObjectId for storage */
 const ObjectIdString = z
   .string()
-  .regex(/^[0-9a-fA-F]{24}$/, 'Must be a 24-character hex string');
+  .regex(/^[0-9a-fA-F]{24}$/, 'Must be a 24-character hex string')
+  .transform((s) => new ObjectId(s));
 
+/** Main Book schema (request payload). _id is never client-supplied */
 const BookSchema = z.object({
   title: z.string().min(1),
   isbn: z.string().min(10),
-  authorId: ObjectIdString, // stored as string, validated as ObjectId shape
+  authorId: ObjectIdString, // accept string, store as ObjectId
   publishedYear: z.number().int().gte(1400).lte(new Date().getFullYear() + 1),
   genres: z.array(z.string()).min(1),
   pages: z.number().int().positive(),
@@ -23,8 +26,14 @@ const BookSchema = z.object({
 });
 
 const parseId = (id) => {
-  try { return new ObjectId(id); }
-  catch { const e = new Error('Invalid id format'); e.statusCode = 400; e.expose = true; throw e; }
+  try {
+    return new ObjectId(id);
+  } catch {
+    const e = new Error('Invalid id format');
+    e.statusCode = 400;
+    e.expose = true;
+    throw e;
+  }
 };
 
 /**
@@ -98,7 +107,9 @@ router.get('/', async (_req, res, next) => {
   try {
     const docs = await getDb().collection('books').find({}).toArray();
     res.status(200).json(docs);
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**
@@ -127,7 +138,9 @@ router.get('/:id', async (req, res, next) => {
     const doc = await getDb().collection('books').findOne({ _id });
     if (!doc) return res.status(404).json({ message: 'Book not found' });
     res.status(200).json(doc);
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**
@@ -137,6 +150,7 @@ router.get('/:id', async (req, res, next) => {
  *     summary: Create a new book
  *     tags: [Books]
  *     security:
+ *       - bearerAuth: []
  *       - oauth2: [write:library]
  *     requestBody:
  *       required: true
@@ -165,12 +179,19 @@ router.get('/:id', async (req, res, next) => {
  */
 router.post('/', jwtCheck, needWrite, async (req, res, next) => {
   try {
-    if (!req.is('application/json')) return res.status(415).json({ message: 'Content-Type must be application/json' });
-    const parsed = BookSchema.parse(req.body);
+    if (!req.is('application/json')) {
+      return res.status(415).json({ message: 'Content-Type must be application/json' });
+    }
+    const parsed = BookSchema.parse(req.body); // authorId now an ObjectId
     const result = await getDb().collection('books').insertOne(parsed);
-    res.status(201).location(`/books/${result.insertedId}`).json({ id: result.insertedId.toString() });
+    res
+      .status(201)
+      .location(`/books/${result.insertedId}`)
+      .json({ id: result.insertedId.toString() });
   } catch (err) {
-    if (err instanceof z.ZodError) return res.status(400).json({ message: 'Validation error', errors: err.flatten() });
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ message: 'Validation error', errors: err.flatten() });
+    }
     next(err);
   }
 });
@@ -182,6 +203,7 @@ router.post('/', jwtCheck, needWrite, async (req, res, next) => {
  *     summary: Replace a book
  *     tags: [Books]
  *     security:
+ *       - bearerAuth: []
  *       - oauth2: [write:library]
  *     parameters:
  *       - in: path
@@ -203,14 +225,18 @@ router.post('/', jwtCheck, needWrite, async (req, res, next) => {
  */
 router.put('/:id', jwtCheck, needWrite, async (req, res, next) => {
   try {
-    if (!req.is('application/json')) return res.status(415).json({ message: 'Content-Type must be application/json' });
+    if (!req.is('application/json')) {
+      return res.status(415).json({ message: 'Content-Type must be application/json' });
+    }
     const _id = parseId(req.params.id);
-    const parsed = BookSchema.parse(req.body);
+    const parsed = BookSchema.parse(req.body); // authorId now an ObjectId
     const result = await getDb().collection('books').replaceOne({ _id }, parsed);
     if (result.matchedCount === 0) return res.status(404).json({ message: 'Book not found' });
     res.status(204).send();
   } catch (err) {
-    if (err instanceof z.ZodError) return res.status(400).json({ message: 'Validation error', errors: err.flatten() });
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ message: 'Validation error', errors: err.flatten() });
+    }
     next(err);
   }
 });
@@ -222,6 +248,7 @@ router.put('/:id', jwtCheck, needWrite, async (req, res, next) => {
  *     summary: Delete a book
  *     tags: [Books]
  *     security:
+ *       - bearerAuth: []
  *       - oauth2: [write:library]
  *     parameters:
  *       - in: path
@@ -241,7 +268,9 @@ router.delete('/:id', jwtCheck, needWrite, async (req, res, next) => {
     const result = await getDb().collection('books').deleteOne({ _id });
     if (result.deletedCount === 0) return res.status(404).json({ message: 'Book not found' });
     res.status(204).send();
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;
